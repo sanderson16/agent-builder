@@ -184,3 +184,22 @@ export interface StepMeta {
   title: string;
   subtitle: string;
 }
+
+// ── Stack recommendation types ──────────────────────────────────────────────
+
+export interface StackChoice {
+  name: string;
+  reason: string;     // WHY this was chosen
+  setup: string;      // How to set it up
+  changeIf: string;   // Context for overriding: "Change this if..."
+}
+
+export interface StackRecommendation {
+  runtime: StackChoice;              // WHERE it runs
+  brain: StackChoice;                // HOW it thinks
+  integrationStrategy: StackChoice;  // HOW it connects to data
+  integrations: StackChoice[];       // Per-source details
+  safetyLayer: StackChoice | null;   // Guardrails (Hooks)
+  pattern: StackChoice;              // Architecture pattern
+  complexity: { score: number; factors: string[] };
+}

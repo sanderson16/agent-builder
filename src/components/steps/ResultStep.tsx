@@ -3,7 +3,9 @@
 import { useMemo } from "react";
 import type { WizardState } from "@/lib/types";
 import { CATEGORIES, TASKS, DATA_SOURCES, TRIGGERS, OUTPUTS, TONES } from "@/lib/wizard-data";
-import { generatePrompt, recommendStack } from "@/lib/prompt-generator";
+import { generatePrompt } from "@/lib/prompt-generator";
+import { recommendStack } from "@/lib/recommendation-engine";
+import type { StackChoice } from "@/lib/types";
 import PromptDisplay from "../PromptDisplay";
 
 interface ResultStepProps {
@@ -17,6 +19,19 @@ function label<T extends { id: string; label: string }>(items: T[], id: string |
 
 function labels<T extends { id: string; label: string }>(items: T[], ids: string[]): string {
   return ids.map((id) => items.find((i) => i.id === id)?.label ?? id).join(", ") || "—";
+}
+
+function StackLayerRow({ label, choice }: { label: string; choice: StackChoice }) {
+  return (
+    <div className="flex gap-3">
+      <span className="text-gray-500 shrink-0 w-28 pt-0.5">{label}:</span>
+      <div>
+        <span className="text-gray-100">{choice.name}</span>
+        <p className="text-xs text-gray-500 mt-0.5">{choice.reason}</p>
+        <p className="text-xs text-gray-600 mt-0.5 italic">Reconsider if: {choice.changeIf}</p>
+      </div>
+    </div>
+  );
 }
 
 export default function ResultStep({ state, onStartOver }: ResultStepProps) {
@@ -131,38 +146,56 @@ export default function ResultStep({ state, onStartOver }: ResultStepProps) {
 
       {/* Recommended Stack */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-5">
-        <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
-          Recommended Automation Stack
-        </h3>
-        <p className="text-xs text-gray-500 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+            Recommended Automation Stack
+          </h3>
+          <span className="text-xs font-mono bg-gray-800 text-amber-400 px-2 py-1 rounded">
+            Complexity: {stack.complexity.score}/15
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 mb-1">
           Auto-selected based on your answers. Included in the generated prompt.
         </p>
-        <div className="space-y-3 text-sm">
+        {stack.complexity.factors.length > 0 && (
+          <p className="text-xs text-gray-600 mb-4">
+            Factors: {stack.complexity.factors.join(" · ")}
+          </p>
+        )}
+
+        <div className="space-y-4 text-sm">
+          <StackLayerRow label="Runtime" choice={stack.runtime} />
+          <StackLayerRow label="Brain" choice={stack.brain} />
+          <StackLayerRow label="Integration Strategy" choice={stack.integrationStrategy} />
+
           <div className="flex gap-3">
-            <span className="text-gray-500 shrink-0 w-28">Runtime:</span>
-            <div>
-              <span className="text-gray-100">{stack.runtime.name}</span>
-              <p className="text-xs text-gray-500 mt-0.5">{stack.runtime.reason}</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-gray-500 shrink-0 w-28">AI Framework:</span>
-            <div>
-              <span className="text-gray-100">{stack.framework.name}</span>
-              <p className="text-xs text-gray-500 mt-0.5">{stack.framework.reason}</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-gray-500 shrink-0 w-28">Integrations:</span>
-            <div className="space-y-1.5">
+            <span className="text-gray-500 shrink-0 w-28 pt-0.5">Integrations:</span>
+            <div className="space-y-2">
               {stack.integrations.map((integ) => (
                 <div key={integ.name}>
                   <span className="text-gray-100">{integ.name}</span>
                   <p className="text-xs text-gray-500 mt-0.5">{integ.reason}</p>
+                  <p className="text-xs text-gray-600 mt-0.5 italic">Reconsider if: {integ.changeIf}</p>
                 </div>
               ))}
             </div>
           </div>
+
+          {stack.safetyLayer ? (
+            <StackLayerRow label="Safety" choice={stack.safetyLayer} />
+          ) : (
+            <div className="flex gap-3">
+              <span className="text-gray-500 shrink-0 w-28 pt-0.5">Safety:</span>
+              <div>
+                <span className="text-gray-400 italic">None — no approval gates</span>
+                <p className="text-xs text-gray-600 mt-0.5 italic">
+                  Reconsider if: you want human approval before sending messages or taking destructive actions.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <StackLayerRow label="Pattern" choice={stack.pattern} />
         </div>
       </div>
 

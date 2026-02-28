@@ -1,5 +1,8 @@
-import type { WizardState, CategoryId, TaskId, DataSourceId, TriggerId, OutputId } from "./types";
+import type { WizardState, DataSourceId, StackRecommendation } from "./types";
 import { CATEGORIES, TASKS, DATA_SOURCES, TRIGGERS, OUTPUTS, TONES } from "./wizard-data";
+import { recommendStack } from "./recommendation-engine";
+
+export { recommendStack } from "./recommendation-engine";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -73,149 +76,46 @@ const SETUP_GUIDES: Record<DataSourceId, string> = {
   - Document the API endpoint and authentication method in the README`,
 };
 
-// ── Automation stack recommendation engine ─────────────────────────────────────
-// Infers the best execution runtime, AI framework, and integration method
-// from the user's wizard selections — no extra steps needed.
+// ── Stack section formatter (5 layers + decision rationale) ─────────────────
 
-export interface StackRecommendation {
-  runtime: { name: string; reason: string; setup: string };
-  framework: { name: string; reason: string; setup: string };
-  integrations: { name: string; reason: string; setup: string }[];
-}
-
-export function recommendStack(state: WizardState): StackRecommendation {
-  // ── Runtime selection ──────────────────────────────────────────────────
-  // Decision factors: trigger type, autonomy level, data source locality
-  const hasLocalSources = state.dataSources.includes("obsidian");
-  const needsAlwaysOn = state.trigger === "data-change" || state.trigger === "combination";
-  const isScheduled = state.trigger === "schedule";
-  const isManual = state.trigger === "manual";
-
-  let runtime: StackRecommendation["runtime"];
-
-  if (isManual) {
-    runtime = {
-      name: "Local CLI (npx tsx)",
-      reason: "Manual triggers run best as a local CLI tool — instant startup, no server overhead, runs when you need it.",
-      setup: "Run with: npx tsx src/index.ts [options]. No deployment needed — runs directly on your machine.",
-    };
-  } else if (hasLocalSources && (isScheduled || needsAlwaysOn)) {
-    runtime = {
-      name: "Local long-running process (PM2 or systemd)",
-      reason: "Obsidian vault is local, so the agent must run on the same machine. PM2 keeps it alive and auto-restarts on failure.",
-      setup: "Install PM2 globally (npm i -g pm2), then: pm2 start src/index.ts --interpreter tsx -- --name my-agent. Use pm2 logs to monitor.",
-    };
-  } else if (isScheduled && state.scheduleFrequency !== "hourly") {
-    runtime = {
-      name: "GitHub Actions (scheduled workflow)",
-      reason: "Daily/weekly schedules are perfect for GitHub Actions — free tier, zero infrastructure, runs reliably on a cron.",
-      setup: "Add a .github/workflows/run-agent.yml with a cron schedule. Secrets go in GitHub repo Settings → Secrets → Actions.",
-    };
-  } else if (needsAlwaysOn) {
-    runtime = {
-      name: "Railway or Render (always-on service)",
-      reason: "Event-driven agents need to be always listening. Railway/Render run Node.js services cheaply with zero DevOps.",
-      setup: "Push to GitHub → connect to Railway (railway.app) or Render (render.com) → set env vars in dashboard → auto-deploys on push.",
-    };
-  } else {
-    // Hourly schedule or combination without local sources
-    runtime = {
-      name: "Local long-running process (PM2)",
-      reason: "Hourly schedules run most reliably as a local process managed by PM2 — fast iteration, easy debugging.",
-      setup: "Install PM2 globally (npm i -g pm2), then: pm2 start src/index.ts --interpreter tsx --name my-agent.",
-    };
-  }
-
-  // ── AI framework selection ─────────────────────────────────────────────
-  // Decision factors: complexity, autonomy, number of data sources, task type
-  const isHighAutonomy = state.autonomy === "autonomous";
-  const isComplex = state.dataSources.length >= 3 ||
-    ["research-analysis", "workflow-automation"].includes(state.category ?? "");
-  const needsMultiStep = ["post-meeting-summary", "qbr-prep", "handoff-doc", "churn-pattern-analysis",
-    "feature-request-trends", "competitive-intel"].includes(state.task ?? "");
-
-  let framework: StackRecommendation["framework"];
-
-  if (isComplex && needsMultiStep && isHighAutonomy) {
-    framework = {
-      name: "Claude Code (agentic, multi-step)",
-      reason: "This task involves multiple data sources, multi-step reasoning, and autonomous decision-making — Claude Code's agentic mode handles the orchestration.",
-      setup: "Use Claude Code as both the builder and the runtime agent. The generated prompt becomes the agent's specification. Run with: claude --prompt-file agent-spec.md",
-    };
-  } else if (isComplex || needsMultiStep) {
-    framework = {
-      name: "Anthropic TypeScript SDK (multi-step pipeline)",
-      reason: "Multiple data sources and processing steps are best handled by a structured pipeline using the Anthropic SDK directly — full control over each step.",
-      setup: "npm install @anthropic-ai/sdk. Set ANTHROPIC_API_KEY in .env. Use claude.messages.create() for each AI processing step.",
-    };
-  } else {
-    framework = {
-      name: "Anthropic TypeScript SDK (single-call)",
-      reason: "This is a straightforward task with clear inputs and outputs — a single Claude API call per run keeps it simple and fast.",
-      setup: "npm install @anthropic-ai/sdk. Set ANTHROPIC_API_KEY in .env. One call to claude.messages.create() with a well-structured prompt.",
-    };
-  }
-
-  // ── Integration method per data source ─────────────────────────────────
-  // Decision factors: data source type, whether MCP server exists, complexity
-  const MCP_AVAILABLE: DataSourceId[] = ["slack", "github", "obsidian", "confluence", "jira"];
-
-  const integrations: StackRecommendation["integrations"] = state.dataSources.map((id) => {
-    const label = lookup(DATA_SOURCES, id)?.label ?? id;
-
-    // MCP is preferred when running in Claude Code agentic mode
-    if (MCP_AVAILABLE.includes(id) && framework.name.includes("Claude Code")) {
-      return {
-        name: `${label}: MCP Server`,
-        reason: `Use the official ${label} MCP server — Claude Code connects natively, no custom API code needed.`,
-        setup: getMcpSetup(id),
-      };
-    }
-
-    // Direct API for everything else
-    return {
-      name: `${label}: Direct API`,
-      reason: `Use the ${label} REST/GraphQL API directly — simpler to debug, fewer moving parts, works with any runtime.`,
-      setup: getDirectApiSetup(id),
-    };
-  });
-
-  return { runtime, framework, integrations };
-}
-
-function getMcpSetup(id: DataSourceId): string {
-  switch (id) {
-    case "slack": return "Add to Claude Code MCP config: @anthropic/slack-mcp-server. Needs SLACK_BOT_TOKEN.";
-    case "github": return "Add to Claude Code MCP config: @anthropic/github-mcp-server. Needs GITHUB_TOKEN.";
-    case "obsidian": return "Add to Claude Code MCP config: point to local vault path. No API key needed.";
-    case "confluence": return "Add to Claude Code MCP config: @anthropic/atlassian-mcp-server. Needs Atlassian API token.";
-    case "jira": return "Add to Claude Code MCP config: @anthropic/atlassian-mcp-server. Needs Atlassian API token.";
-    default: return "Configure the appropriate MCP server for this data source.";
-  }
-}
-
-function getDirectApiSetup(id: DataSourceId): string {
-  switch (id) {
-    case "hubspot": return "npm install @hubspot/api-client. Use the HubSpot Node.js SDK for CRM operations.";
-    case "slack": return "npm install @slack/web-api. Use Slack Web API for reading channels and posting messages.";
-    case "jira": return "Use Jira REST API v3 with axios. Base URL: https://yourorg.atlassian.net/rest/api/3/";
-    case "confluence": return "Use Confluence REST API with axios. Base URL: https://yourorg.atlassian.net/wiki/rest/api/";
-    case "fireflies": return "Use Fireflies GraphQL API with axios. Endpoint: https://api.fireflies.ai/graphql";
-    case "email": return "npm install googleapis (Gmail) or @microsoft/microsoft-graph-client (Outlook).";
-    case "github": return "npm install @octokit/rest. Use Octokit SDK for repos, issues, and PRs.";
-    case "bitbucket": return "Use Bitbucket REST API v2 with axios. Base URL: https://api.bitbucket.org/2.0/";
-    case "obsidian": return "Use Node.js fs module to read/write markdown files directly from the vault path.";
-    case "other": return "Use axios or node-fetch to connect to the custom API endpoint.";
-    default: return "Use the appropriate SDK or REST API client.";
-  }
-}
-
-function formatStackSection(stack: StackRecommendation): string {
+function formatStackSection(stack: StackRecommendation, state: WizardState): string {
   const integrationLines = stack.integrations
     .map((i) => `  - ${i.name}
       Why: ${i.reason}
-      Setup: ${i.setup}`)
+      Setup: ${i.setup}
+      Change if: ${i.changeIf}`)
     .join("\n");
+
+  const safetyBlock = stack.safetyLayer
+    ? `  **Safety Layer: ${stack.safetyLayer.name}**
+  Why: ${stack.safetyLayer.reason}
+  Setup: ${stack.safetyLayer.setup}
+  Change if: ${stack.safetyLayer.changeIf}`
+    : "  **Safety Layer: None** (agent runs without approval gates)";
+
+  // Build per-layer "why" lines for rationale
+  const whyLines = [
+    `- Runtime is ${stack.runtime.name} because ${stack.runtime.reason.charAt(0).toLowerCase()}${stack.runtime.reason.slice(1)}`,
+    `- Brain is ${stack.brain.name} because ${stack.brain.reason.charAt(0).toLowerCase()}${stack.brain.reason.slice(1)}`,
+    `- Integrations use ${stack.integrationStrategy.name} because ${stack.integrationStrategy.reason.charAt(0).toLowerCase()}${stack.integrationStrategy.reason.slice(1)}`,
+    stack.safetyLayer
+      ? `- Safety layer uses ${stack.safetyLayer.name} because ${stack.safetyLayer.reason.charAt(0).toLowerCase()}${stack.safetyLayer.reason.slice(1)}`
+      : "- No safety layer because escalation is set to never or no cautious signals detected",
+    `- Pattern is ${stack.pattern.name} because ${stack.pattern.reason.charAt(0).toLowerCase()}${stack.pattern.reason.slice(1)}`,
+  ];
+
+  // Build per-layer "change if" lines
+  const changeLines = [
+    `- ${stack.runtime.changeIf}`,
+    `- ${stack.brain.changeIf}`,
+    `- ${stack.integrationStrategy.changeIf}`,
+    stack.safetyLayer ? `- ${stack.safetyLayer.changeIf}` : null,
+    `- ${stack.pattern.changeIf}`,
+  ].filter(Boolean);
+
+  const factorsText = stack.complexity.factors.length > 0
+    ? stack.complexity.factors.join(", ")
+    : "minimal complexity";
 
   return `  **Recommended Automation Stack**
   (Auto-selected based on your task, trigger, data sources, and preferences)
@@ -223,13 +123,45 @@ function formatStackSection(stack: StackRecommendation): string {
   **Execution Runtime: ${stack.runtime.name}**
   Why: ${stack.runtime.reason}
   Setup: ${stack.runtime.setup}
+  Change if: ${stack.runtime.changeIf}
 
-  **AI Framework: ${stack.framework.name}**
-  Why: ${stack.framework.reason}
-  Setup: ${stack.framework.setup}
+  **Brain: ${stack.brain.name}**
+  Why: ${stack.brain.reason}
+  Setup: ${stack.brain.setup}
+  Change if: ${stack.brain.changeIf}
 
-  **Integration Method (per data source):**
-${integrationLines}`;
+  **Integration Strategy: ${stack.integrationStrategy.name}**
+  Why: ${stack.integrationStrategy.reason}
+  Setup: ${stack.integrationStrategy.setup}
+  Change if: ${stack.integrationStrategy.changeIf}
+
+  **Integrations (per data source):**
+${integrationLines}
+
+${safetyBlock}
+
+  **Architecture Pattern: ${stack.pattern.name}**
+  Why: ${stack.pattern.reason}
+  Setup: ${stack.pattern.setup}
+  Change if: ${stack.pattern.changeIf}
+
+  <decision_rationale>
+    **Complexity score: ${stack.complexity.score}/15**
+    Factors: ${factorsText}
+
+    **Why this stack was chosen:**
+    ${whyLines.join("\n    ")}
+
+    **You should change these recommendations if:**
+    ${changeLines.join("\n    ")}
+
+    **Full user context for your review:**
+    - Problem: ${state.problemDescription.trim() || "(not provided)"}
+    - Manual process: ${state.manualProcess.trim() || "(not provided)"}
+    - Success definition: ${state.successDefinition.trim() || "(not provided)"}
+    - Must-always rules: ${state.mustAlways.trim() || "(not provided)"}
+    - Never-do rules: ${state.neverDo.trim() || "(not provided)"}
+  </decision_rationale>`;
 }
 
 // ── Task descriptions for the prompt ───────────────────────────────────────────
@@ -497,7 +429,7 @@ export function generatePrompt(state: WizardState): string {
     .join("\n\n");
 
   const stack = recommendStack(state);
-  const stackSection = formatStackSection(stack);
+  const stackSection = formatStackSection(stack, state);
 
   const toneLabel = TONES.find((t) => t.id === state.tone)?.label ?? "";
 
