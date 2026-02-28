@@ -73,6 +73,165 @@ const SETUP_GUIDES: Record<DataSourceId, string> = {
   - Document the API endpoint and authentication method in the README`,
 };
 
+// ── Automation stack recommendation engine ─────────────────────────────────────
+// Infers the best execution runtime, AI framework, and integration method
+// from the user's wizard selections — no extra steps needed.
+
+export interface StackRecommendation {
+  runtime: { name: string; reason: string; setup: string };
+  framework: { name: string; reason: string; setup: string };
+  integrations: { name: string; reason: string; setup: string }[];
+}
+
+export function recommendStack(state: WizardState): StackRecommendation {
+  // ── Runtime selection ──────────────────────────────────────────────────
+  // Decision factors: trigger type, autonomy level, data source locality
+  const hasLocalSources = state.dataSources.includes("obsidian");
+  const needsAlwaysOn = state.trigger === "data-change" || state.trigger === "combination";
+  const isScheduled = state.trigger === "schedule";
+  const isManual = state.trigger === "manual";
+
+  let runtime: StackRecommendation["runtime"];
+
+  if (isManual) {
+    runtime = {
+      name: "Local CLI (npx tsx)",
+      reason: "Manual triggers run best as a local CLI tool — instant startup, no server overhead, runs when you need it.",
+      setup: "Run with: npx tsx src/index.ts [options]. No deployment needed — runs directly on your machine.",
+    };
+  } else if (hasLocalSources && (isScheduled || needsAlwaysOn)) {
+    runtime = {
+      name: "Local long-running process (PM2 or systemd)",
+      reason: "Obsidian vault is local, so the agent must run on the same machine. PM2 keeps it alive and auto-restarts on failure.",
+      setup: "Install PM2 globally (npm i -g pm2), then: pm2 start src/index.ts --interpreter tsx -- --name my-agent. Use pm2 logs to monitor.",
+    };
+  } else if (isScheduled && state.scheduleFrequency !== "hourly") {
+    runtime = {
+      name: "GitHub Actions (scheduled workflow)",
+      reason: "Daily/weekly schedules are perfect for GitHub Actions — free tier, zero infrastructure, runs reliably on a cron.",
+      setup: "Add a .github/workflows/run-agent.yml with a cron schedule. Secrets go in GitHub repo Settings → Secrets → Actions.",
+    };
+  } else if (needsAlwaysOn) {
+    runtime = {
+      name: "Railway or Render (always-on service)",
+      reason: "Event-driven agents need to be always listening. Railway/Render run Node.js services cheaply with zero DevOps.",
+      setup: "Push to GitHub → connect to Railway (railway.app) or Render (render.com) → set env vars in dashboard → auto-deploys on push.",
+    };
+  } else {
+    // Hourly schedule or combination without local sources
+    runtime = {
+      name: "Local long-running process (PM2)",
+      reason: "Hourly schedules run most reliably as a local process managed by PM2 — fast iteration, easy debugging.",
+      setup: "Install PM2 globally (npm i -g pm2), then: pm2 start src/index.ts --interpreter tsx --name my-agent.",
+    };
+  }
+
+  // ── AI framework selection ─────────────────────────────────────────────
+  // Decision factors: complexity, autonomy, number of data sources, task type
+  const isHighAutonomy = state.autonomy === "autonomous";
+  const isComplex = state.dataSources.length >= 3 ||
+    ["research-analysis", "workflow-automation"].includes(state.category ?? "");
+  const needsMultiStep = ["post-meeting-summary", "qbr-prep", "handoff-doc", "churn-pattern-analysis",
+    "feature-request-trends", "competitive-intel"].includes(state.task ?? "");
+
+  let framework: StackRecommendation["framework"];
+
+  if (isComplex && needsMultiStep && isHighAutonomy) {
+    framework = {
+      name: "Claude Code (agentic, multi-step)",
+      reason: "This task involves multiple data sources, multi-step reasoning, and autonomous decision-making — Claude Code's agentic mode handles the orchestration.",
+      setup: "Use Claude Code as both the builder and the runtime agent. The generated prompt becomes the agent's specification. Run with: claude --prompt-file agent-spec.md",
+    };
+  } else if (isComplex || needsMultiStep) {
+    framework = {
+      name: "Anthropic TypeScript SDK (multi-step pipeline)",
+      reason: "Multiple data sources and processing steps are best handled by a structured pipeline using the Anthropic SDK directly — full control over each step.",
+      setup: "npm install @anthropic-ai/sdk. Set ANTHROPIC_API_KEY in .env. Use claude.messages.create() for each AI processing step.",
+    };
+  } else {
+    framework = {
+      name: "Anthropic TypeScript SDK (single-call)",
+      reason: "This is a straightforward task with clear inputs and outputs — a single Claude API call per run keeps it simple and fast.",
+      setup: "npm install @anthropic-ai/sdk. Set ANTHROPIC_API_KEY in .env. One call to claude.messages.create() with a well-structured prompt.",
+    };
+  }
+
+  // ── Integration method per data source ─────────────────────────────────
+  // Decision factors: data source type, whether MCP server exists, complexity
+  const MCP_AVAILABLE: DataSourceId[] = ["slack", "github", "obsidian", "confluence", "jira"];
+
+  const integrations: StackRecommendation["integrations"] = state.dataSources.map((id) => {
+    const label = lookup(DATA_SOURCES, id)?.label ?? id;
+
+    // MCP is preferred when running in Claude Code agentic mode
+    if (MCP_AVAILABLE.includes(id) && framework.name.includes("Claude Code")) {
+      return {
+        name: `${label}: MCP Server`,
+        reason: `Use the official ${label} MCP server — Claude Code connects natively, no custom API code needed.`,
+        setup: getMcpSetup(id),
+      };
+    }
+
+    // Direct API for everything else
+    return {
+      name: `${label}: Direct API`,
+      reason: `Use the ${label} REST/GraphQL API directly — simpler to debug, fewer moving parts, works with any runtime.`,
+      setup: getDirectApiSetup(id),
+    };
+  });
+
+  return { runtime, framework, integrations };
+}
+
+function getMcpSetup(id: DataSourceId): string {
+  switch (id) {
+    case "slack": return "Add to Claude Code MCP config: @anthropic/slack-mcp-server. Needs SLACK_BOT_TOKEN.";
+    case "github": return "Add to Claude Code MCP config: @anthropic/github-mcp-server. Needs GITHUB_TOKEN.";
+    case "obsidian": return "Add to Claude Code MCP config: point to local vault path. No API key needed.";
+    case "confluence": return "Add to Claude Code MCP config: @anthropic/atlassian-mcp-server. Needs Atlassian API token.";
+    case "jira": return "Add to Claude Code MCP config: @anthropic/atlassian-mcp-server. Needs Atlassian API token.";
+    default: return "Configure the appropriate MCP server for this data source.";
+  }
+}
+
+function getDirectApiSetup(id: DataSourceId): string {
+  switch (id) {
+    case "hubspot": return "npm install @hubspot/api-client. Use the HubSpot Node.js SDK for CRM operations.";
+    case "slack": return "npm install @slack/web-api. Use Slack Web API for reading channels and posting messages.";
+    case "jira": return "Use Jira REST API v3 with axios. Base URL: https://yourorg.atlassian.net/rest/api/3/";
+    case "confluence": return "Use Confluence REST API with axios. Base URL: https://yourorg.atlassian.net/wiki/rest/api/";
+    case "fireflies": return "Use Fireflies GraphQL API with axios. Endpoint: https://api.fireflies.ai/graphql";
+    case "email": return "npm install googleapis (Gmail) or @microsoft/microsoft-graph-client (Outlook).";
+    case "github": return "npm install @octokit/rest. Use Octokit SDK for repos, issues, and PRs.";
+    case "bitbucket": return "Use Bitbucket REST API v2 with axios. Base URL: https://api.bitbucket.org/2.0/";
+    case "obsidian": return "Use Node.js fs module to read/write markdown files directly from the vault path.";
+    case "other": return "Use axios or node-fetch to connect to the custom API endpoint.";
+    default: return "Use the appropriate SDK or REST API client.";
+  }
+}
+
+function formatStackSection(stack: StackRecommendation): string {
+  const integrationLines = stack.integrations
+    .map((i) => `  - ${i.name}
+      Why: ${i.reason}
+      Setup: ${i.setup}`)
+    .join("\n");
+
+  return `  **Recommended Automation Stack**
+  (Auto-selected based on your task, trigger, data sources, and preferences)
+
+  **Execution Runtime: ${stack.runtime.name}**
+  Why: ${stack.runtime.reason}
+  Setup: ${stack.runtime.setup}
+
+  **AI Framework: ${stack.framework.name}**
+  Why: ${stack.framework.reason}
+  Setup: ${stack.framework.setup}
+
+  **Integration Method (per data source):**
+${integrationLines}`;
+}
+
 // ── Task descriptions for the prompt ───────────────────────────────────────────
 
 function getTaskDescription(state: WizardState): string {
@@ -325,6 +484,9 @@ export function generatePrompt(state: WizardState): string {
     .filter(Boolean)
     .join("\n\n");
 
+  const stack = recommendStack(state);
+  const stackSection = formatStackSection(stack);
+
   return `<role>
   You are an expert automation engineer building a production-ready agent for a non-technical CS/Support team.
   Explain everything in plain language. Default to action — build it, don't just suggest.
@@ -385,6 +547,10 @@ ${setupSections}
   - Create a README.md with plain-language setup instructions
   - Include a "Quick Start" section that gets them running in under 5 minutes
 </setup_guidance>
+
+<automation_stack>
+${stackSection}
+</automation_stack>
 
 <architecture>
 ${getTriggerArchitecture(state)}

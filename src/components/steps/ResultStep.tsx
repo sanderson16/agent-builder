@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { WizardState } from "@/lib/types";
 import { CATEGORIES, TASKS, DATA_SOURCES, TRIGGERS, OUTPUTS } from "@/lib/wizard-data";
-import { generatePrompt } from "@/lib/prompt-generator";
+import { generatePrompt, recommendStack } from "@/lib/prompt-generator";
 import PromptDisplay from "../PromptDisplay";
 
 interface ResultStepProps {
@@ -21,6 +21,7 @@ function labels<T extends { id: string; label: string }>(items: T[], ids: string
 
 export default function ResultStep({ state, onStartOver }: ResultStepProps) {
   const prompt = useMemo(() => generatePrompt(state), [state]);
+  const stack = useMemo(() => recommendStack(state), [state]);
 
   const taskLabel =
     state.task === "custom"
@@ -72,6 +73,43 @@ export default function ResultStep({ state, onStartOver }: ResultStepProps) {
               {state.detailLevel === "comprehensive" ? "Detailed" : "Concise"},{" "}
               {state.autonomy === "cautious" ? "Cautious" : "Autonomous"}
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Recommended Stack */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-5">
+        <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">
+          Recommended Automation Stack
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Auto-selected based on your answers. Included in the generated prompt.
+        </p>
+        <div className="space-y-3 text-sm">
+          <div className="flex gap-3">
+            <span className="text-gray-500 shrink-0 w-28">Runtime:</span>
+            <div>
+              <span className="text-gray-100">{stack.runtime.name}</span>
+              <p className="text-xs text-gray-500 mt-0.5">{stack.runtime.reason}</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <span className="text-gray-500 shrink-0 w-28">AI Framework:</span>
+            <div>
+              <span className="text-gray-100">{stack.framework.name}</span>
+              <p className="text-xs text-gray-500 mt-0.5">{stack.framework.reason}</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <span className="text-gray-500 shrink-0 w-28">Integrations:</span>
+            <div className="space-y-1.5">
+              {stack.integrations.map((integ) => (
+                <div key={integ.name}>
+                  <span className="text-gray-100">{integ.name}</span>
+                  <p className="text-xs text-gray-500 mt-0.5">{integ.reason}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

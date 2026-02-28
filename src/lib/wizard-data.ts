@@ -11,12 +11,12 @@ import type {
 // ── Step metadata ──────────────────────────────────────────────────────────────
 
 export const STEPS: StepMeta[] = [
-  { number: 1, title: "Category", subtitle: "What area of your work do you want to automate?" },
-  { number: 2, title: "Task", subtitle: "What specific task?" },
-  { number: 3, title: "Data Sources", subtitle: "What tools does this agent need access to?" },
-  { number: 4, title: "Trigger", subtitle: "How should this agent run?" },
-  { number: 5, title: "Output", subtitle: "Where should results go?" },
-  { number: 6, title: "Priorities", subtitle: "What matters most?" },
+  { number: 1, title: "What part of your job?", subtitle: "Pick the area you spend the most time on" },
+  { number: 2, title: "What do you wish was automatic?", subtitle: "Choose a task — or describe your own in plain English" },
+  { number: 3, title: "Where does the info live?", subtitle: "Pick every tool this agent should pull data from" },
+  { number: 4, title: "When should it run?", subtitle: "Tell us how often you need this done" },
+  { number: 5, title: "Where do you want results?", subtitle: "Pick where the finished work should show up" },
+  { number: 6, title: "How should it think?", subtitle: "Tell the agent what matters most to you" },
 ];
 
 // ── Categories (Step 1) ────────────────────────────────────────────────────────

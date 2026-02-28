@@ -3,21 +3,21 @@ import Link from "next/link";
 const HOW_IT_WORKS = [
   {
     step: "1",
-    title: "Describe",
+    title: "Describe Your Problem",
     description:
-      "Tell us what you want to automate — pick a category and task, or describe your own.",
+      "Answer a few plain-English questions about what you wish was automatic. No technical knowledge needed.",
   },
   {
     step: "2",
-    title: "Configure",
+    title: "We Pick the Tech",
     description:
-      "Select your data sources, trigger type, output destination, and priorities.",
+      "The app automatically selects the best runtime, AI framework, and integrations for your use case.",
   },
   {
     step: "3",
-    title: "Generate",
+    title: "Paste and Build",
     description:
-      "Get a production-quality prompt. Paste it into Claude Code and your agent gets built.",
+      "Copy the generated prompt, paste it into Claude Code, and follow the guided setup. That's it.",
   },
 ];
 
@@ -71,9 +71,9 @@ export default function HomePage() {
           <span className="text-primary-400">for Your Team</span>
         </h1>
         <p className="mt-6 text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
-          Your CS team needs AI agents but doesn&apos;t know how to build them.
-          Answer 6 simple questions and get a ready-to-paste Claude Code prompt
-          that builds the agent for you — no coding required.
+          Describe what you wish was automatic — in plain English, like making a wish list.
+          We handle all the technical decisions. You get a ready-to-paste prompt
+          that builds your agent for you. No coding required.
         </p>
         <Link
           href="/builder"
