@@ -1,5 +1,5 @@
 import type { WizardState, CategoryId, TaskId, DataSourceId, TriggerId, OutputId } from "./types";
-import { CATEGORIES, TASKS, DATA_SOURCES, TRIGGERS, OUTPUTS } from "./wizard-data";
+import { CATEGORIES, TASKS, DATA_SOURCES, TRIGGERS, OUTPUTS, TONES } from "./wizard-data";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -346,10 +346,17 @@ function getIntentSection(state: WizardState): string {
         .join("\n")
     : "    - Use reasonable judgment about when to proceed vs. when to flag for review";
 
+  const failMode =
+    state.failMode === "stop"
+      ? "Fail-closed: When something goes wrong, stop and wait for human guidance rather than proceeding with potentially bad data."
+      : "Fail-open: When something goes wrong, keep going with what's available, note the issue in the output, and continue delivering value.";
+
   return `  **Goals and values:**
   - ${tradeOff}
   - ${detail}
   - ${autonomy}
+  - ${failMode}
+${state.successDefinition.trim() ? `\n  **Success looks like:** ${state.successDefinition.trim()}` : ""}
 
   **Escalation triggers — stop and ask the user when:**
 ${escalation}`;
@@ -364,6 +371,11 @@ function getAcceptanceCriteria(state: WizardState): string {
   criteria.push("The agent runs successfully with valid API credentials and produces the expected output format");
   criteria.push("All secrets are loaded from .env — no hardcoded credentials anywhere in the codebase");
   criteria.push("The README explains how to configure, run, and test the agent in plain language");
+
+  // User-defined success criteria
+  if (state.successDefinition.trim()) {
+    criteria.push(`User-defined success: ${state.successDefinition.trim()}`);
+  }
 
   // Trigger-specific
   if (state.trigger === "schedule") {
@@ -487,6 +499,8 @@ export function generatePrompt(state: WizardState): string {
   const stack = recommendStack(state);
   const stackSection = formatStackSection(stack);
 
+  const toneLabel = TONES.find((t) => t.id === state.tone)?.label ?? "";
+
   return `<role>
   You are an expert automation engineer building a production-ready agent for a non-technical CS/Support team.
   Explain everything in plain language. Default to action — build it, don't just suggest.
@@ -497,6 +511,7 @@ export function generatePrompt(state: WizardState): string {
 <task>
   Build an automated agent for the "${category?.label}" category.
   Specific task: ${task?.label} — ${task?.description ?? state.customTask}
+${state.problemDescription.trim() ? `\n  **The problem in the user's own words:**\n  ${state.problemDescription.trim()}` : ""}
 
   This agent is for a CS/Support team member who is not a developer. They need a tool
   that runs ${trigger?.label?.toLowerCase() ?? "as configured"} and delivers results to ${outputs.join(", ")}.
@@ -522,6 +537,7 @@ export function generatePrompt(state: WizardState): string {
 
   **Data sources in use:**
   ${sources.map((s) => `- ${s}`).join("\n  ")}
+${state.alertRecipient.trim() ? `\n  **Alert recipient:** ${state.alertRecipient.trim()}` : ""}
 </context>
 
 <intent>
@@ -554,7 +570,7 @@ ${stackSection}
 
 <architecture>
 ${getTriggerArchitecture(state)}
-
+${state.manualProcess.trim() ? `\n  **User's current manual workflow (mirror these steps):**\n  ${state.manualProcess.trim()}\n` : ""}
   **Shared structure:**
   - src/config.ts — loads .env, exports typed configuration, validates required vars
   - src/sources/ — one file per data source (hubspot.ts, slack.ts, etc.)
@@ -573,7 +589,14 @@ ${getOutputSpec(state)}
   - Bold key information (names, numbers, status changes)
   - Keep the most important information at the top
   - If output is long, include a TL;DR summary at the beginning
-</output_specification>
+${toneLabel ? `  - Tone: ${toneLabel} — all output should match this voice consistently` : ""}
+</output_specification>${state.exampleOutput.trim() ? `
+
+<output_example>
+  The user provided this example of ideal output. Match this style, structure, and level of detail:
+
+${state.exampleOutput.trim()}
+</output_example>` : ""}
 
 <constraints>
   **MUSTS:**
@@ -583,6 +606,7 @@ ${getOutputSpec(state)}
   - Handle errors gracefully — log clearly, never crash silently
   - Include a test/dry-run mode that works without making real API calls
   - Include a .env.example file with all required variables
+${state.mustAlways.trim() ? `  - ${state.mustAlways.trim().split("\n").join("\n  - ")}` : ""}
 
   **MUST-NOTS:**
   - Never hardcode API keys, tokens, or secrets
@@ -590,6 +614,7 @@ ${getOutputSpec(state)}
   - Never auto-send emails or messages without explicit user configuration
   - Never silently skip errors — always log what went wrong
   - Never require the user to modify source code for basic configuration
+${state.neverDo.trim() ? `  - ${state.neverDo.trim().split("\n").join("\n  - ")}` : ""}
 
   **PREFERENCES:**
   - Simple over clever — prioritize readability
@@ -603,6 +628,7 @@ ${getOutputSpec(state)}
   - If a data source returns unexpected data → log the raw response and continue with a warning
   - If the output destination is unreachable → save output locally as a fallback and alert the user
   - If rate-limited → wait and retry with exponential backoff, log the delay
+${state.alertRecipient.trim() ? `  - On any critical failure → notify ${state.alertRecipient.trim()}` : ""}
 </constraints>
 
 <evaluation>

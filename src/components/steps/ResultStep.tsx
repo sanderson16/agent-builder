@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { WizardState } from "@/lib/types";
-import { CATEGORIES, TASKS, DATA_SOURCES, TRIGGERS, OUTPUTS } from "@/lib/wizard-data";
+import { CATEGORIES, TASKS, DATA_SOURCES, TRIGGERS, OUTPUTS, TONES } from "@/lib/wizard-data";
 import { generatePrompt, recommendStack } from "@/lib/prompt-generator";
 import PromptDisplay from "../PromptDisplay";
 
@@ -67,14 +67,66 @@ export default function ResultStep({ state, onStartOver }: ResultStepProps) {
             <span className="text-gray-100">{labels(OUTPUTS, state.outputs)}</span>
           </div>
           <div>
+            <span className="text-gray-500">Tone:</span>{" "}
+            <span className="text-gray-100">{label(TONES, state.tone)}</span>
+          </div>
+          <div>
             <span className="text-gray-500">Style:</span>{" "}
             <span className="text-gray-100">
               {state.tradeOff === "accuracy" ? "Accurate" : "Fast"},{" "}
               {state.detailLevel === "comprehensive" ? "Detailed" : "Concise"},{" "}
-              {state.autonomy === "cautious" ? "Cautious" : "Autonomous"}
+              {state.autonomy === "cautious" ? "Cautious" : "Autonomous"},{" "}
+              {state.failMode === "stop" ? "Fail-closed" : "Fail-open"}
             </span>
           </div>
         </div>
+        {/* Extended details from new steps */}
+        {(state.problemDescription.trim() || state.mustAlways.trim() || state.neverDo.trim()) && (
+          <div className="mt-4 pt-4 border-t border-gray-800 space-y-2 text-sm">
+            {state.problemDescription.trim() && (
+              <div>
+                <span className="text-gray-500">Problem:</span>{" "}
+                <span className="text-gray-100">
+                  {state.problemDescription.slice(0, 120)}
+                  {state.problemDescription.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.successDefinition.trim() && (
+              <div>
+                <span className="text-gray-500">Success:</span>{" "}
+                <span className="text-gray-100">
+                  {state.successDefinition.slice(0, 120)}
+                  {state.successDefinition.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.mustAlways.trim() && (
+              <div>
+                <span className="text-gray-500">Must always:</span>{" "}
+                <span className="text-gray-100">
+                  {state.mustAlways.slice(0, 120)}
+                  {state.mustAlways.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.neverDo.trim() && (
+              <div>
+                <span className="text-gray-500">Never do:</span>{" "}
+                <span className="text-gray-100">
+                  {state.neverDo.slice(0, 120)}
+                  {state.neverDo.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.alertRecipient.trim() && (
+              <div>
+                <span className="text-gray-500">Alert:</span>{" "}
+                <span className="text-gray-100">{state.alertRecipient}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Recommended Stack */}

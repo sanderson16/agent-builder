@@ -6,6 +6,7 @@ import type {
   Output,
   EscalationTrigger,
   StepMeta,
+  Tone,
 } from "./types";
 
 // ── Step metadata ──────────────────────────────────────────────────────────────
@@ -13,10 +14,12 @@ import type {
 export const STEPS: StepMeta[] = [
   { number: 1, title: "What part of your job?", subtitle: "Pick the area you spend the most time on" },
   { number: 2, title: "What do you wish was automatic?", subtitle: "Choose a task — or describe your own in plain English" },
-  { number: 3, title: "Where does the info live?", subtitle: "Pick every tool this agent should pull data from" },
-  { number: 4, title: "When should it run?", subtitle: "Tell us how often you need this done" },
-  { number: 5, title: "Where do you want results?", subtitle: "Pick where the finished work should show up" },
-  { number: 6, title: "How should it think?", subtitle: "Tell the agent what matters most to you" },
+  { number: 3, title: "Tell us more", subtitle: "Help us understand the problem so the agent gets it right" },
+  { number: 4, title: "Where does the info live?", subtitle: "Pick every tool this agent should pull data from" },
+  { number: 5, title: "When should it run?", subtitle: "Tell us how often you need this done" },
+  { number: 6, title: "Where do you want results?", subtitle: "Pick where the finished work should show up" },
+  { number: 7, title: "Ground rules", subtitle: "Set the tone and boundaries for your agent" },
+  { number: 8, title: "How should it think?", subtitle: "Tell the agent what matters most to you" },
 ];
 
 // ── Categories (Step 1) ────────────────────────────────────────────────────────
@@ -274,7 +277,7 @@ export const OUTPUTS: Output[] = [
   { id: "multiple", label: "Multiple Outputs", description: "Send to several destinations at once", icon: "📡" },
 ];
 
-// ── Escalation Triggers (Step 6) ───────────────────────────────────────────────
+// ── Escalation Triggers (Step 8) ───────────────────────────────────────────────
 
 export const ESCALATION_TRIGGERS: EscalationTrigger[] = [
   { id: "unexpected-data", label: "When data looks unexpected" },
@@ -282,4 +285,13 @@ export const ESCALATION_TRIGGERS: EscalationTrigger[] = [
   { id: "missing-source", label: "When it can't access a data source" },
   { id: "empty-results", label: "When results are empty" },
   { id: "never", label: "Never — just log and continue" },
+];
+
+// ── Tones (Step 7) ─────────────────────────────────────────────────────────────
+
+export const TONES: Tone[] = [
+  { id: "professional", label: "Professional", description: "Polished and business-appropriate", icon: "👔" },
+  { id: "friendly", label: "Friendly", description: "Warm, approachable, and conversational", icon: "😊" },
+  { id: "casual", label: "Casual", description: "Relaxed and informal — like a teammate", icon: "🤙" },
+  { id: "technical", label: "Technical", description: "Precise, data-driven, and detailed", icon: "🔬" },
 ];

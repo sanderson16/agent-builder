@@ -77,6 +77,12 @@ export type TradeOff = "accuracy" | "speed";
 export type DetailLevel = "comprehensive" | "concise";
 export type Autonomy = "cautious" | "autonomous";
 
+// Tone IDs (Step 7 — Ground rules)
+export type ToneId = "professional" | "friendly" | "casual" | "technical";
+
+// Fail mode (Step 8 — Priorities)
+export type FailMode = "stop" | "continue";
+
 // Escalation triggers
 export type EscalationTriggerId =
   | "unexpected-data"
@@ -131,19 +137,39 @@ export interface EscalationTrigger {
   label: string;
 }
 
+// Tone definition
+export interface Tone {
+  id: ToneId;
+  label: string;
+  description: string;
+  icon: string;
+}
+
 // Full wizard state
 export interface WizardState {
   category: CategoryId | null;
   task: TaskId | null;
   customTask: string;
+  // Step 3 — Tell us more
+  problemDescription: string;
+  manualProcess: string;
+  successDefinition: string;
   dataSources: DataSourceId[];
   trigger: TriggerId | null;
   scheduleFrequency: ScheduleFrequency | null;
   outputs: OutputId[];
+  // Step 7 — Ground rules
+  tone: ToneId | null;
+  mustAlways: string;
+  neverDo: string;
+  alertRecipient: string;
+  exampleOutput: string;
+  // Step 8 — Priorities
   tradeOff: TradeOff | null;
   detailLevel: DetailLevel | null;
   autonomy: Autonomy | null;
   escalationTriggers: EscalationTriggerId[];
+  failMode: FailMode | null;
 }
 
 // Step props shared interface

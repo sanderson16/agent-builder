@@ -103,6 +103,16 @@ export default function PrioritiesStep({ state, onChange }: StepProps) {
         valueB="autonomous"
       />
 
+      <TogglePair
+        question="When something goes wrong?"
+        optionA={{ label: "Stop and wait", description: "Pause and ask for help before continuing" }}
+        optionB={{ label: "Keep going", description: "Work with what it has and note the issue" }}
+        value={state.failMode}
+        onSelect={(v) => onChange({ failMode: v as "stop" | "continue" })}
+        valueA="stop"
+        valueB="continue"
+      />
+
       <div className="space-y-3">
         <p className="text-sm font-medium text-gray-300">
           When should your agent stop and ask you?
