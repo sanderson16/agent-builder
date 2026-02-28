@@ -316,12 +316,12 @@ export function selectPattern(
     };
   }
 
-  if (hasSubagents && isResearch) {
+  if (hasSubagents && (isResearch || sourceCount >= 4)) {
     return {
       name: `Fan-Out${hitlOverlay}`,
-      reason: "Research tasks with subagents benefit from parallel fan-out — each subagent investigates one source or angle, then results are merged.",
+      reason: `${sourceCount} independent data sources with subagents — each subagent fetches from one source in parallel, then a coordinator merges and synthesizes the results.`,
       setup: "Create a coordinator agent that spawns subagents in parallel. Each subagent has focused tools and a narrow prompt. The coordinator merges and synthesizes results.",
-      changeIf: "the research is actually sequential (each step depends on the previous) — switch to Autonomous Agent Loop.",
+      changeIf: "the data sources actually depend on each other (e.g., need Jira ticket IDs from HubSpot first) — switch to Autonomous Agent Loop for sequential planning.",
     };
   }
 
