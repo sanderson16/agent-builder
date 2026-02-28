@@ -76,92 +76,129 @@ const SETUP_GUIDES: Record<DataSourceId, string> = {
   - Document the API endpoint and authentication method in the README`,
 };
 
-// ── Stack section formatter (5 layers + decision rationale) ─────────────────
+// ── Stack section formatter (concise layers + synthesized rationale) ─────────
 
 function formatStackSection(stack: StackRecommendation, state: WizardState): string {
   const integrationLines = stack.integrations
-    .map((i) => `  - ${i.name}
-      Why: ${i.reason}
-      Setup: ${i.setup}
-      Change if: ${i.changeIf}`)
+    .map((i) => `  - ${i.name} — ${i.setup}`)
     .join("\n");
 
-  const safetyBlock = stack.safetyLayer
-    ? `  **Safety Layer: ${stack.safetyLayer.name}**
-  Why: ${stack.safetyLayer.reason}
-  Setup: ${stack.safetyLayer.setup}
-  Change if: ${stack.safetyLayer.changeIf}`
-    : "  **Safety Layer: None** (agent runs without approval gates)";
+  const safetyLine = stack.safetyLayer
+    ? `  **Safety Layer: ${stack.safetyLayer.name}**\n  ${stack.safetyLayer.setup}`
+    : "  **Safety Layer: None**";
 
-  // Build per-layer "why" lines for rationale
-  const whyLines = [
-    `- Runtime is ${stack.runtime.name} because ${stack.runtime.reason.charAt(0).toLowerCase()}${stack.runtime.reason.slice(1)}`,
-    `- Brain is ${stack.brain.name} because ${stack.brain.reason.charAt(0).toLowerCase()}${stack.brain.reason.slice(1)}`,
-    `- Integrations use ${stack.integrationStrategy.name} because ${stack.integrationStrategy.reason.charAt(0).toLowerCase()}${stack.integrationStrategy.reason.slice(1)}`,
-    stack.safetyLayer
-      ? `- Safety layer uses ${stack.safetyLayer.name} because ${stack.safetyLayer.reason.charAt(0).toLowerCase()}${stack.safetyLayer.reason.slice(1)}`
-      : "- No safety layer because escalation is set to never or no cautious signals detected",
-    `- Pattern is ${stack.pattern.name} because ${stack.pattern.reason.charAt(0).toLowerCase()}${stack.pattern.reason.slice(1)}`,
-  ];
+  // Build signal-based rationale (references wizard answers, not marketing copy)
+  const srcNames = state.dataSources.join(", ");
+  const srcCount = state.dataSources.length;
+  const mcpSources = state.dataSources.filter((id) =>
+    ["slack", "github", "obsidian", "confluence", "jira"].includes(id));
+  const directSources = state.dataSources.filter((id) =>
+    !["slack", "github", "obsidian", "confluence", "jira"].includes(id));
 
-  // Build per-layer "change if" lines
-  const changeLines = [
-    `- ${stack.runtime.changeIf}`,
-    `- ${stack.brain.changeIf}`,
-    `- ${stack.integrationStrategy.changeIf}`,
-    stack.safetyLayer ? `- ${stack.safetyLayer.changeIf}` : null,
-    `- ${stack.pattern.changeIf}`,
-  ].filter(Boolean);
+  const triggerSignal = state.trigger === "schedule"
+    ? `trigger=schedule (${state.scheduleFrequency ?? "daily"})`
+    : `trigger=${state.trigger}`;
+
+  const autonomySignal = state.autonomy ?? "not set";
+  const escalationSignal = state.escalationTriggers.length > 0
+    ? state.escalationTriggers.join(", ")
+    : "none";
+
+  const runtimeWhy = buildRuntimeWhy(state);
+  const brainWhy = `complexity ${stack.complexity.score} (${srcCount} sources, ${state.trigger} trigger${COMPLEX_TASKS_SET.has(state.task ?? "") ? ", complex task type" : ""})`;
+  const integrationWhy = mcpSources.length > 0 && directSources.length > 0
+    ? `MCP available for ${mcpSources.join(", ")}; Direct API for ${directSources.join(", ")}`
+    : mcpSources.length === srcCount
+      ? `MCP servers available for all ${srcCount} sources`
+      : `no MCP servers available — all Direct API`;
+  const safetyWhy = stack.safetyLayer
+    ? `autonomy=${autonomySignal}, escalation includes [${escalationSignal}], failMode=${state.failMode}`
+    : `escalation=[${escalationSignal}], no cautious signals`;
+  const patternWhy = stack.pattern.name.includes("Fan-Out")
+    ? `${srcCount} independent sources + subagents → parallel fetch`
+    : stack.pattern.name.includes("Pipeline")
+      ? `${srcCount} sources → sequential fetch-process-deliver`
+      : stack.pattern.name.includes("Single-Pass")
+        ? `${srcCount <= 2 ? "few" : "minimal"} sources, straightforward flow`
+        : `subagents with multi-phase orchestration`;
+
+  // Build override conditions (concise, scenario-based)
+  const overrides: string[] = [];
+  if (stack.runtime.name.includes("GitHub Actions") || stack.runtime.name.includes("GitLab")) {
+    overrides.push("User doesn't have a GitHub/GitLab account → switch runtime to local PM2");
+  }
+  if (stack.runtime.name.includes("Railway") || stack.runtime.name.includes("Render")) {
+    overrides.push("Events are infrequent (few per day) → switch runtime to scheduled GitHub Actions poll");
+  }
+  if (stack.runtime.name.includes("PM2") || stack.runtime.name.includes("Local CLI")) {
+    overrides.push("User wants it running without their machine on → switch runtime to Railway/Render or GitHub Actions");
+  }
+  if (stack.brain.name.includes("Subagents")) {
+    overrides.push("Task is actually sequential, not parallel → downgrade brain to single Agent SDK");
+  }
+  if (stack.brain.name.includes("Agent SDK") && !stack.brain.name.includes("Subagents")) {
+    overrides.push("Task is simpler than expected (single fetch + format) → downgrade brain to Headless CLI");
+    overrides.push("User's manual process reveals distinct parallel phases → upgrade brain to Agent SDK + Subagents");
+  }
+  if (stack.brain.name.includes("Headless CLI")) {
+    overrides.push("Task needs multi-step tool use → upgrade brain to Agent SDK");
+  }
+  if (!stack.brain.name.includes("Computer Use")) {
+    overrides.push("Manual process involves clicking through a GUI with no API → add Computer Use");
+  }
+  if (stack.safetyLayer) {
+    overrides.push("User trusts agent fully and wants max speed → remove safety hooks");
+  } else {
+    overrides.push("User wants approval before sending messages or destructive actions → add Hooks safety layer");
+  }
 
   const factorsText = stack.complexity.factors.length > 0
     ? stack.complexity.factors.join(", ")
     : "minimal complexity";
 
   return `  **Recommended Automation Stack**
-  (Auto-selected based on your task, trigger, data sources, and preferences)
 
-  **Execution Runtime: ${stack.runtime.name}**
-  Why: ${stack.runtime.reason}
-  Setup: ${stack.runtime.setup}
-  Change if: ${stack.runtime.changeIf}
-
-  **Brain: ${stack.brain.name}**
-  Why: ${stack.brain.reason}
-  Setup: ${stack.brain.setup}
-  Change if: ${stack.brain.changeIf}
-
+  **Runtime: ${stack.runtime.name}** — ${stack.runtime.setup}
+  **Brain: ${stack.brain.name}** — ${stack.brain.setup}
   **Integration Strategy: ${stack.integrationStrategy.name}**
-  Why: ${stack.integrationStrategy.reason}
-  Setup: ${stack.integrationStrategy.setup}
-  Change if: ${stack.integrationStrategy.changeIf}
-
-  **Integrations (per data source):**
 ${integrationLines}
-
-${safetyBlock}
-
-  **Architecture Pattern: ${stack.pattern.name}**
-  Why: ${stack.pattern.reason}
-  Setup: ${stack.pattern.setup}
-  Change if: ${stack.pattern.changeIf}
+${safetyLine}
+  **Pattern: ${stack.pattern.name}** — ${stack.pattern.setup}
 
   <decision_rationale>
-    **Complexity score: ${stack.complexity.score}/15**
-    Factors: ${factorsText}
+    Complexity: ${stack.complexity.score}/15 (${factorsText})
 
-    **Why this stack was chosen:**
-    ${whyLines.join("\n    ")}
+    Signals → Decisions:
+    - ${triggerSignal}, ${state.dataSources.includes("obsidian") ? "local data (obsidian)" : "no local-only data"} → Runtime: ${stack.runtime.name}
+    - ${brainWhy} → Brain: ${stack.brain.name}
+    - ${integrationWhy} → Strategy: ${stack.integrationStrategy.name}
+    - ${safetyWhy} → Safety: ${stack.safetyLayer?.name ?? "None"}
+    - ${patternWhy} → Pattern: ${stack.pattern.name}
 
-    **You should change these recommendations if:**
-    ${changeLines.join("\n    ")}
+    Override if:
+    ${overrides.map((o) => `- ${o}`).join("\n    ")}
 
-    **Full user context for your review:**
+    User context (review before building):
     - Problem: ${state.problemDescription.trim() || "(not provided)"}
     - Manual process: ${state.manualProcess.trim() || "(not provided)"}
-    - Success definition: ${state.successDefinition.trim() || "(not provided)"}
-    - Must-always rules: ${state.mustAlways.trim() || "(not provided)"}
-    - Never-do rules: ${state.neverDo.trim() || "(not provided)"}
+    - Success: ${state.successDefinition.trim() || "(not provided)"}
+    - Must-always: ${state.mustAlways.trim() || "(not provided)"}
+    - Never-do: ${state.neverDo.trim() || "(not provided)"}
   </decision_rationale>`;
+}
+
+// Signal helpers for rationale
+const COMPLEX_TASKS_SET = new Set([
+  "qbr-prep", "handoff-doc", "churn-pattern-analysis",
+  "feature-request-trends", "competitive-intel", "ticket-routing",
+]);
+
+function buildRuntimeWhy(state: WizardState): string {
+  if (state.trigger === "manual") return "manual trigger → run locally on demand";
+  if (state.dataSources.includes("obsidian")) return "obsidian (local data) → must run on same machine";
+  if (state.trigger === "schedule") return `schedule (${state.scheduleFrequency ?? "daily"}) → ${state.scheduleFrequency === "hourly" ? "local PM2" : "GitHub Actions cron"}`;
+  if (state.trigger === "data-change" || state.trigger === "combination") return `${state.trigger} trigger → needs always-on listener`;
+  return "default";
 }
 
 // ── Task descriptions for the prompt ───────────────────────────────────────────
