@@ -25,7 +25,7 @@ function hasGuiKeywords(state: WizardState): boolean {
 const MCP_AVAILABLE: DataSourceId[] = ["slack", "github", "obsidian", "confluence", "jira"];
 
 const COMPLEX_TASKS = [
-  "post-meeting-summary", "qbr-prep", "handoff-doc",
+  "qbr-prep", "handoff-doc",
   "churn-pattern-analysis", "feature-request-trends",
   "competitive-intel", "ticket-routing",
 ];
