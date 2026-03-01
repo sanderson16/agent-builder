@@ -96,7 +96,7 @@ export default function ResultStep({ state, onStartOver }: ResultStepProps) {
           </div>
         </div>
         {/* Extended details from new steps */}
-        {(state.problemDescription.trim() || state.mustAlways.trim() || state.neverDo.trim()) && (
+        {(state.problemDescription.trim() || state.mustAlways.trim() || state.neverDo.trim() || state.gotchas.trim() || state.antiGoals.trim() || state.preferences.trim() || state.hardPart.trim()) && (
           <div className="mt-4 pt-4 border-t border-gray-800 space-y-2 text-sm">
             {state.problemDescription.trim() && (
               <div>
@@ -131,6 +131,42 @@ export default function ResultStep({ state, onStartOver }: ResultStepProps) {
                 <span className="text-gray-100">
                   {state.neverDo.slice(0, 120)}
                   {state.neverDo.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.gotchas.trim() && (
+              <div>
+                <span className="text-gray-500">Gotchas:</span>{" "}
+                <span className="text-gray-100">
+                  {state.gotchas.slice(0, 120)}
+                  {state.gotchas.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.hardPart.trim() && (
+              <div>
+                <span className="text-gray-500">Hard part:</span>{" "}
+                <span className="text-gray-100">
+                  {state.hardPart.slice(0, 120)}
+                  {state.hardPart.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.antiGoals.trim() && (
+              <div>
+                <span className="text-gray-500">Anti-goals:</span>{" "}
+                <span className="text-gray-100">
+                  {state.antiGoals.slice(0, 120)}
+                  {state.antiGoals.length > 120 ? "..." : ""}
+                </span>
+              </div>
+            )}
+            {state.preferences.trim() && (
+              <div>
+                <span className="text-gray-500">Preferences:</span>{" "}
+                <span className="text-gray-100">
+                  {state.preferences.slice(0, 120)}
+                  {state.preferences.length > 120 ? "..." : ""}
                 </span>
               </div>
             )}

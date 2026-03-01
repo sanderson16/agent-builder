@@ -274,7 +274,6 @@ export const OUTPUTS: Output[] = [
   { id: "document", label: "Document / Note", description: "Save to Confluence, Obsidian, or a file", icon: "📄" },
   { id: "email-draft", label: "Email Draft", description: "Create a draft email ready to review and send", icon: "📧" },
   { id: "spreadsheet", label: "Spreadsheet / Report", description: "Output to CSV, JSON, or a formatted report", icon: "📊" },
-  { id: "multiple", label: "Multiple Outputs", description: "Send to several destinations at once", icon: "📡" },
 ];
 
 // ── Escalation Triggers (Step 8) ───────────────────────────────────────────────

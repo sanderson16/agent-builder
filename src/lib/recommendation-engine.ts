@@ -13,13 +13,14 @@ function lookup<T extends { id: string }>(items: T[], id: string | null): T | un
 }
 
 const GUI_KEYWORDS = [
-  "click", "browser", "website", "login to", "dashboard",
-  "portal", "ui", "screen", "mouse", "button",
+  /\bclick\b/i, /\bbrowser\b/i, /\bwebsite\b/i, /\blogin to\b/i,
+  /\bdashboard\b/i, /\bportal\b/i, /\bui\b/i, /\bgui\b/i,
+  /\bscreen\b/i, /\bmouse\b/i, /\bbutton\b/i,
 ];
 
 function hasGuiKeywords(state: WizardState): boolean {
-  const text = `${state.problemDescription} ${state.manualProcess}`.toLowerCase();
-  return GUI_KEYWORDS.some((kw) => text.includes(kw));
+  const text = `${state.problemDescription} ${state.manualProcess}`;
+  return GUI_KEYWORDS.some((re) => re.test(text));
 }
 
 const MCP_AVAILABLE: DataSourceId[] = ["slack", "github", "obsidian", "confluence", "jira"];
@@ -56,7 +57,7 @@ export function calculateComplexity(state: WizardState): { score: number; factor
   }
 
   // Multiple outputs
-  if (state.outputs.includes("multiple") || state.outputs.length >= 3) {
+  if (state.outputs.length >= 3) {
     score += 1;
     factors.push("multiple output destinations (+1)");
   }
@@ -107,9 +108,9 @@ export function selectRuntime(state: WizardState): StackChoice {
   if (isScheduled && state.scheduleFrequency !== "hourly") {
     if (hasBitbucket) {
       return {
-        name: "GitLab CI/CD (scheduled pipeline)",
-        reason: "Your task runs on a ${state.scheduleFrequency} schedule and you use Bitbucket. GitLab CI handles scheduled pipelines well and integrates with your existing workflow.",
-        setup: "Add a .gitlab-ci.yml with a scheduled pipeline. Set environment variables in GitLab CI/CD Settings → Variables.",
+        name: "Bitbucket Pipelines (scheduled pipeline)",
+        reason: `Your task runs on a ${state.scheduleFrequency} schedule and you use Bitbucket. Bitbucket Pipelines handles scheduled runs and integrates with your existing workflow.`,
+        setup: "Add a bitbucket-pipelines.yml with a scheduled pipeline. Set environment variables in Repository Settings → Pipelines → Repository variables.",
         changeIf: "you have a GitHub account you'd prefer to use — GitHub Actions has a more generous free tier. Or if you need sub-minute scheduling, switch to a local PM2 process.",
       };
     }
@@ -254,7 +255,9 @@ export function selectSafetyLayer(state: WizardState): StackChoice | null {
     state.escalationTriggers.includes("send-message") ||
     state.failMode === "stop";
 
-  if (state.escalationTriggers.length === 1 && state.escalationTriggers[0] === "never") {
+  // "never" only overrides escalation triggers, not cautious autonomy or stop fail mode
+  const isNeverOnly = state.escalationTriggers.length === 1 && state.escalationTriggers[0] === "never";
+  if (isNeverOnly && !needsSafety) {
     return null;
   }
 
@@ -283,11 +286,21 @@ export function selectPattern(
   safetyLayer: StackChoice | null,
 ): StackChoice {
   const sourceCount = state.dataSources.length;
+  const isComputerUse = brain.name.includes("Computer Use");
   const isHeadlessCli = brain.name.includes("Headless CLI");
   const isAgentSdk = brain.name.includes("Agent SDK") && !brain.name.includes("Subagents");
   const hasSubagents = brain.name.includes("Subagents");
   const isResearch = state.category === "research-analysis";
   const hitlOverlay = safetyLayer ? " + Human-in-the-Loop" : "";
+
+  if (isComputerUse) {
+    return {
+      name: `Sequential GUI Automation${hitlOverlay}`,
+      reason: "GUI automation runs step-by-step through screens. Each step captures a screenshot, decides what to click/type, and verifies the result before moving on.",
+      setup: "Define each GUI step as a discrete action (navigate, click, type, extract). Include verification checkpoints after critical actions. Save screenshots for debugging.",
+      changeIf: "the target application has an API — API access is faster, cheaper, and more reliable than GUI automation.",
+    };
+  }
 
   if (isHeadlessCli) {
     return {

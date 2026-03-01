@@ -124,8 +124,8 @@ function formatStackSection(stack: StackRecommendation, state: WizardState): str
 
   // Build override conditions (concise, scenario-based)
   const overrides: string[] = [];
-  if (stack.runtime.name.includes("GitHub Actions") || stack.runtime.name.includes("GitLab")) {
-    overrides.push("User doesn't have a GitHub/GitLab account → switch runtime to local PM2");
+  if (stack.runtime.name.includes("GitHub Actions") || stack.runtime.name.includes("Bitbucket Pipelines")) {
+    overrides.push("User doesn't have a GitHub/Bitbucket account → switch runtime to local PM2");
   }
   if (stack.runtime.name.includes("Railway") || stack.runtime.name.includes("Render")) {
     overrides.push("Events are infrequent (few per day) → switch runtime to scheduled GitHub Actions poll");
@@ -183,7 +183,7 @@ ${safetyLine}
     - Manual process: ${state.manualProcess.trim() || "(not provided)"}
     - Success: ${state.successDefinition.trim() || "(not provided)"}
     - Must-always: ${state.mustAlways.trim() || "(not provided)"}
-    - Never-do: ${state.neverDo.trim() || "(not provided)"}
+    - Never-do: ${state.neverDo.trim() || "(not provided)"}${state.gotchas.trim() ? `\n    - Gotchas: ${state.gotchas.trim()}` : ""}${state.hardPart.trim() ? `\n    - Hard part: ${state.hardPart.trim()}` : ""}${state.antiGoals.trim() ? `\n    - Anti-goals: ${state.antiGoals.trim()}` : ""}
   </decision_rationale>`;
 }
 
@@ -272,8 +272,6 @@ function getOutputSpec(state: WizardState): string {
         return "  - **Email Draft**: Generate a complete email with subject line, greeting, body, and sign-off. Save as a draft (do NOT auto-send).";
       case "Spreadsheet / Report":
         return "  - **Spreadsheet/Report**: Output clean CSV or formatted markdown table. Include column headers and a summary row if applicable.";
-      case "Multiple Outputs":
-        return "  - **Multiple Outputs**: Deliver to all configured destinations. Each output should be formatted appropriately for its medium.";
       default:
         return `  - **${o}**: Format output appropriately for this destination.`;
     }
@@ -325,7 +323,7 @@ function getIntentSection(state: WizardState): string {
   - ${detail}
   - ${autonomy}
   - ${failMode}
-${state.successDefinition.trim() ? `\n  **Success looks like:** ${state.successDefinition.trim()}` : ""}
+${state.successDefinition.trim() ? `\n  **Success looks like:** ${state.successDefinition.trim()}` : ""}${state.antiGoals.trim() ? `\n\n  **Anti-goals (outputs that technically work but are failures):**\n  ${state.antiGoals.trim()}` : ""}
 
   **Escalation triggers — stop and ask the user when:**
 ${escalation}`;
@@ -344,6 +342,11 @@ function getAcceptanceCriteria(state: WizardState): string {
   // User-defined success criteria
   if (state.successDefinition.trim()) {
     criteria.push(`User-defined success: ${state.successDefinition.trim()}`);
+  }
+
+  // Anti-goal verification
+  if (state.antiGoals.trim()) {
+    criteria.push(`Anti-goal verification: Confirm the output does NOT exhibit these failure patterns: ${state.antiGoals.trim()}`);
   }
 
   // Trigger-specific
@@ -400,6 +403,16 @@ function getEvaluationScenarios(state: WizardState): string {
     }
   }
 
+  // User-informed scenarios from success definition
+  if (state.successDefinition.trim()) {
+    scenarios.push(`**Success criteria verification**: Using real or known-good test data, verify: ${state.successDefinition.trim()}`);
+  }
+
+  // Anti-goal verification
+  if (state.antiGoals.trim()) {
+    scenarios.push(`**Anti-goal check**: Review the output and confirm it does NOT exhibit these failure patterns: ${state.antiGoals.trim()}`);
+  }
+
   scenarios.push("**Output delivery**: Verify the output actually arrives at the configured destination (Slack channel, file, email draft, etc.).");
 
   return scenarios.map((s, i) => `  ${i + 1}. ${s}`).join("\n");
@@ -449,6 +462,68 @@ function getRequirements(state: WizardState): string {
   return reqs.map((r) => `  ${r}`).join("\n");
 }
 
+// ── Execution plan (phased build guidance for complex agents) ────────────────
+
+function getExecutionPlan(state: WizardState, complexityScore: number): string {
+  if (complexityScore <= 2) return "";
+
+  const sources = state.dataSources.map((id) => lookup(DATA_SOURCES, id)?.label ?? id);
+
+  if (complexityScore <= 5) {
+    return `
+<execution_plan>
+  Build this agent in phases. Complete and test each phase before moving on.
+
+  **Phase 1 — Project setup**
+  - Initialize the project (npm init, tsconfig, .env.example)
+  - Create src/config.ts that loads and validates all env vars
+  - Verify: running the project prints "Config loaded successfully" with no missing keys
+
+  **Phase 2 — Data sources (build and test each independently)**
+${sources.map((s, i) => `  - ${i + 1}. Build src/sources/${s.toLowerCase().replace(/[^a-z]/g, "")}.ts — fetch data, log a sample to console`).join("\n")}
+  - Verify: each source file can run standalone and print real data
+
+  **Phase 3 — Output formatting**
+  - Build src/output.ts — format fetched data into the final output
+  - Verify: pass mock data in, confirm output matches the expected format
+
+  **Phase 4 — Wire together and deliver**
+  - Build src/agent.ts — orchestrate fetch → process → deliver
+  - Build src/index.ts — set up trigger, call agent
+  - Verify: end-to-end run produces correct output at the configured destination
+</execution_plan>`;
+  }
+
+  // complexity 6+
+  return `
+<execution_plan>
+  Build this agent in phases. This is a complex build — do NOT try to write everything at once.
+
+  **Phase 1 — Project setup**
+  - Initialize the project (npm init, tsconfig, .env.example)
+  - Create src/config.ts that loads and validates all env vars
+  - Verify: running the project prints "Config loaded successfully"
+
+  **Phase 2 — Data sources (build and test EACH independently)**
+${sources.map((s, i) => `  - ${i + 1}. Build src/sources/${s.toLowerCase().replace(/[^a-z]/g, "")}.ts — fetch data, log a sample to console`).join("\n")}
+  - Verify: each source file runs standalone and returns real data
+
+  **Phase 3 — Agent orchestration**
+  - Build the main orchestrator (src/agent.ts)
+  - If using subagents: build each subagent with mock data first, then integrate
+  - Verify: orchestrator correctly calls each source and collects results
+
+  **Phase 4 — Output formatting and delivery**
+  - Build src/output.ts — format results for each destination
+  - Verify: pass orchestrator output in, confirm formatting is correct
+
+  **Phase 5 — Integration test**
+  - Wire src/index.ts to set up trigger and call the full pipeline
+  - Run end-to-end with real data
+  - Verify: output arrives at the configured destination with correct content
+</execution_plan>`;
+}
+
 // ── Main generator ─────────────────────────────────────────────────────────────
 
 export function generatePrompt(state: WizardState): string {
@@ -467,6 +542,7 @@ export function generatePrompt(state: WizardState): string {
 
   const stack = recommendStack(state);
   const stackSection = formatStackSection(stack, state);
+  const executionPlan = getExecutionPlan(state, stack.complexity.score);
 
   const toneLabel = TONES.find((t) => t.id === state.tone)?.label ?? "";
 
@@ -506,7 +582,7 @@ ${state.problemDescription.trim() ? `\n  **The problem in the user's own words:*
 
   **Data sources in use:**
   ${sources.map((s) => `- ${s}`).join("\n  ")}
-${state.alertRecipient.trim() ? `\n  **Alert recipient:** ${state.alertRecipient.trim()}` : ""}
+${state.alertRecipient.trim() ? `\n  **Alert recipient:** ${state.alertRecipient.trim()}` : ""}${state.gotchas.trim() ? `\n\n  **Institutional context (things Claude would get wrong without knowing):**\n  ${state.gotchas.trim()}` : ""}${state.hardPart.trim() ? `\n\n  **Where judgment calls happen (the hard part):**\n  ${state.hardPart.trim()}` : ""}
 </context>
 
 <intent>
@@ -547,7 +623,7 @@ ${state.manualProcess.trim() ? `\n  **User's current manual workflow (mirror the
   - src/agent.ts — core logic that orchestrates fetch → process → deliver
   - src/index.ts — entry point (sets up trigger, calls agent)
   - tests/ — at least one test file that runs the agent with mock data
-</architecture>
+</architecture>${executionPlan}
 
 <output_specification>
 ${getOutputSpec(state)}
@@ -558,7 +634,7 @@ ${getOutputSpec(state)}
   - Bold key information (names, numbers, status changes)
   - Keep the most important information at the top
   - If output is long, include a TL;DR summary at the beginning
-${toneLabel ? `  - Tone: ${toneLabel} — all output should match this voice consistently` : ""}
+${toneLabel ? `  - Tone: ${toneLabel} — all output should match this voice consistently` : ""}${state.antiGoals.trim() ? `\n\n  **Formatting anti-patterns (do NOT produce output like this):**\n  ${state.antiGoals.trim().split("\n").map((line) => `- ${line.replace(/^-\s*/, "")}`).join("\n  ")}` : ""}
 </output_specification>${state.exampleOutput.trim() ? `
 
 <output_example>
@@ -591,6 +667,7 @@ ${state.neverDo.trim() ? `  - ${state.neverDo.trim().split("\n").join("\n  - ")}
   - Single responsibility — each file does one thing well
   - Comments only on non-obvious logic — don't over-document
   - Flat file structure — avoid deep nesting
+${state.preferences.trim() ? `  - ${state.preferences.trim().split("\n").join("\n  - ")}` : ""}
 
   **ESCALATION TRIGGERS:**
   - If an API key is missing or invalid → stop and tell the user exactly which key is needed and how to get it

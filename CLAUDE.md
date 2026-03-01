@@ -18,11 +18,13 @@ src/lib/types.ts                 — All TypeScript types (WizardState, StackCho
 src/lib/wizard-data.ts           — Static data: categories, tasks, data sources, triggers, outputs, tones
 src/lib/recommendation-engine.ts — 6-stage decision tree: complexity → runtime → brain → integrations → safety → pattern
 src/lib/prompt-generator.ts      — Generates the full XML-structured prompt string from wizard state
+src/lib/input-quality.ts         — Client-side heuristic: assessProblemDescription() → weak/good/great
 src/components/Wizard.tsx         — Main orchestrator: manages WizardState, step navigation, validation
 src/components/steps/             — One component per wizard step (CategoryStep through ResultStep)
 src/components/OptionCard.tsx     — Reusable card button used by most steps
 src/components/PromptDisplay.tsx  — Syntax-highlighted prompt viewer with copy button
 src/components/StepIndicator.tsx  — Progress bar (8 numbered circles)
+src/components/HelpText.tsx       — Reusable coaching text component for inline guidance
 src/app/page.tsx                  — Landing page (server component)
 src/app/builder/page.tsx          — Wizard page ("use client", renders <Wizard />)
 docs/automation-patterns.md       — Internal reference: triggers, data layers, brain levels, runtimes, patterns
@@ -46,14 +48,14 @@ Vercel auto-deploys from `master` branch. No vercel.json — uses default Next.j
 - +1 per data source
 - +2 if category is research-analysis or workflow-automation
 - +2 if task is in COMPLEX_TASKS (qbr-prep, handoff-doc, churn-pattern-analysis, feature-request-trends, competitive-intel, ticket-routing)
-- +1 if outputs include "multiple" or 3+ outputs selected
+- +1 if 3+ outputs selected
 - +1 if autonomy is "autonomous"
 - +1 if trigger is "data-change" or "combination"
 
 **Stage 2 — Runtime (WHERE it runs):**
 - manual trigger → Local CLI (npx tsx)
 - obsidian in sources → Local PM2
-- schedule (daily/weekly) + bitbucket → GitLab CI/CD
+- schedule (daily/weekly) + bitbucket → Bitbucket Pipelines
 - schedule (daily/weekly) → GitHub Actions
 - data-change or combination → Railway/Render (always-on)
 - hourly schedule → Local PM2
@@ -64,7 +66,7 @@ Vercel auto-deploys from `master` branch. No vercel.json — uses default Next.j
 - complexity 3-5 → Claude Agent SDK (single agent)
 - complexity 6+ → Claude Agent SDK + Subagents
 
-GUI keywords: "click", "browser", "website", "login to", "dashboard", "portal", "ui", "screen", "mouse", "button"
+GUI keywords (word-boundary regex): click, browser, website, login to, dashboard, portal, ui, gui, screen, mouse, button
 
 **Stage 4 — Integrations (HOW it connects to data):**
 - MCP available for: slack, github, obsidian, confluence, jira
@@ -74,7 +76,10 @@ GUI keywords: "click", "browser", "website", "login to", "dashboard", "portal", 
 
 **Stage 5 — Safety Layer:**
 - Hooks (PreToolUse + PostToolUse) if: autonomy=cautious OR send-message escalation OR failMode=stop
-- null if escalation is only ["never"]
+- null if escalation is only ["never"] AND no other safety signals (cautious/stop)
+
+**Stage 6.5 — Architecture Pattern (Computer Use):**
+- Computer Use brain → Sequential GUI Automation (dedicated branch, not fallback)
 
 **Stage 6 — Architecture Pattern:**
 - Headless CLI → Single-Pass
@@ -99,17 +104,18 @@ GUI keywords: "click", "browser", "website", "login to", "dashboard", "portal", 
 ```
 <role>           — Expert automation engineer persona
 <task>           — Category, task, user's problem description, trigger, outputs, sources
-<context>        — Node.js/TS environment, team context, data sources, alert recipient
-<intent>         — Trade-offs, autonomy, fail mode, success criteria, escalation triggers
-<acceptance_criteria> — Numbered acceptance tests
+<context>        — Node.js/TS environment, team context, data sources, alert recipient, gotchas, hard part
+<intent>         — Trade-offs, autonomy, fail mode, success criteria, anti-goals, escalation triggers
+<acceptance_criteria> — Numbered acceptance tests (includes anti-goal verification when provided)
 <requirements>   — Data integration, AI processing, scheduling, output, logging, config, errors
 <setup_guidance> — Per-source API setup (credentials, scopes, .env vars)
 <automation_stack> — 5-layer stack + <decision_rationale> with signals→decisions and overrides
 <architecture>   — Trigger-specific file structure + user's manual workflow
-<output_specification> — Per-output formatting rules + tone
+<execution_plan> — (Conditional, complexity 3+) Phased build guidance: 4 phases for medium, 5 for high complexity
+<output_specification> — Per-output formatting rules + tone + anti-pattern counter-examples
 <output_example> — (Conditional) User's pasted example
-<constraints>    — MUSTS, MUST-NOTS, PREFERENCES, ESCALATION TRIGGERS
-<evaluation>     — Test scenarios (dry run, missing key, empty data, category-specific, delivery)
+<constraints>    — MUSTS, MUST-NOTS, PREFERENCES (includes user prefs), ESCALATION TRIGGERS
+<evaluation>     — Test scenarios (dry run, missing key, empty data, category-specific, user-informed, delivery)
 ```
 
 Setup guides exist for all 10 data sources with exact credential names, required API scopes, .env variable names, and npm packages.
@@ -120,11 +126,11 @@ Setup guides exist for all 10 data sources with exact credential names, required
 |------|-----------|-----------------|---------------------|
 | 0 | CategoryStep | category (1 of 6) | category selected |
 | 1 | TaskStep | task (1 of 24 + custom) | task selected, custom text if custom |
-| 2 | ContextStep | problemDescription, manualProcess, successDefinition | problemDescription not empty |
+| 2 | ContextStep | problemDescription, manualProcess, successDefinition, gotchas, hardPart | problemDescription not empty |
 | 3 | DataSourceStep | dataSources[] (multi-select from 10) | at least 1 selected |
 | 4 | TriggerStep | trigger + scheduleFrequency if schedule | trigger selected, frequency if schedule |
-| 5 | OutputStep | outputs[] (multi-select from 5) | at least 1 selected |
-| 6 | GroundRulesStep | tone, mustAlways, neverDo, alertRecipient, exampleOutput | tone selected |
+| 5 | OutputStep | outputs[] (multi-select from 4) | at least 1 selected |
+| 6 | GroundRulesStep | tone, mustAlways, neverDo, antiGoals, preferences, alertRecipient, exampleOutput | tone selected |
 | 7 | PrioritiesStep | tradeOff, detailLevel, autonomy, failMode, escalationTriggers[] | all 4 toggles set |
 | 8 | ResultStep | (displays results) | — |
 

@@ -69,8 +69,7 @@ export type OutputId =
   | "slack"
   | "document"
   | "email-draft"
-  | "spreadsheet"
-  | "multiple";
+  | "spreadsheet";
 
 // Trade-off preferences
 export type TradeOff = "accuracy" | "speed";
@@ -158,12 +157,17 @@ export interface WizardState {
   trigger: TriggerId | null;
   scheduleFrequency: ScheduleFrequency | null;
   outputs: OutputId[];
+  // Step 3 — Additional context
+  gotchas: string;
+  hardPart: string;
   // Step 7 — Ground rules
   tone: ToneId | null;
   mustAlways: string;
   neverDo: string;
   alertRecipient: string;
   exampleOutput: string;
+  antiGoals: string;
+  preferences: string;
   // Step 8 — Priorities
   tradeOff: TradeOff | null;
   detailLevel: DetailLevel | null;
